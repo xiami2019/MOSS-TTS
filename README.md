@@ -44,6 +44,7 @@ MOSS‑TTS Family is an open‑source **speech and sound generation model family
 - [Introduction](#introduction)
 - [Model Architecture](#model-architecture)
 - [Released Models](#released-models)
+- [Supported Languages](#supported-languages)
 - [Quickstart](#quickstart)
   - [Environment Setup](#environment-setup)
   - [(Optional) Install FlashAttention 2](#optional-install-flashattention-2)
@@ -88,6 +89,7 @@ We train **MossTTSDelay** and **MossTTSLocal** as complementary baselines under 
 
 ## Released Models
 
+
 | Model | Architecture | Size | Model Card | Hugging Face | ModelScope |
 |---|---|---:|---|---|---|
 | **MOSS-TTS** | `MossTTSDelay` | 8B | [![Model Card](https://img.shields.io/badge/Model%20Card-View-blue?logo=markdown)](docs/moss_tts_model_card.md) | [![Hugging Face](https://img.shields.io/badge/Huggingface-Model-orange?logo=huggingface)](https://huggingface.co/OpenMOSS-Team/MOSS-TTS) | [![ModelScope](https://img.shields.io/badge/ModelScope-Model-lightgrey?logo=modelscope)](https://modelscope.cn/models/openmoss/MOSS-TTS) |
@@ -96,6 +98,20 @@ We train **MossTTSDelay** and **MossTTSLocal** as complementary baselines under 
 | **MOSS‑VoiceGenerator** | `MossTTSDelay` | 1.7B | [![Model Card](https://img.shields.io/badge/Model%20Card-View-blue?logo=markdown)](docs/moss_voice_generator_model_card.md) | [![Hugging Face](https://img.shields.io/badge/Huggingface-Model-orange?logo=huggingface)](https://huggingface.co/OpenMOSS-Team/MOSS-VoiceGenerator) | [![ModelScope](https://img.shields.io/badge/ModelScope-Model-lightgrey?logo=modelscope)](https://modelscope.cn/models/openmoss/MOSS-VoiceGenerator) |
 | **MOSS‑SoundEffect** | `MossTTSDelay` | 8B | [![Model Card](https://img.shields.io/badge/Model%20Card-View-blue?logo=markdown)](docs/moss_sound_effect_model_card.md) | [![Hugging Face](https://img.shields.io/badge/Huggingface-Model-orange?logo=huggingface)](https://huggingface.co/OpenMOSS-Team/MOSS-SoundEffect) | [![ModelScope](https://img.shields.io/badge/ModelScope-Model-lightgrey?logo=modelscope)](https://modelscope.cn/models/openmoss/MOSS-SoundEffect) |
 | **MOSS‑TTS‑Realtime** | `MossTTSRealtime` | 1.7B | [![Model Card](https://img.shields.io/badge/Model%20Card-View-blue?logo=markdown)](docs/moss_tts_realtime_model_card.md) | [![Hugging Face](https://img.shields.io/badge/Huggingface-Model-orange?logo=huggingface)](https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Realtime) | [![ModelScope](https://img.shields.io/badge/ModelScope-Model-lightgrey?logo=modelscope)](https://modelscope.cn/models/openmoss/MOSS-TTS-Realtime) |
+
+## Supported Languages
+
+MOSS-TTS, MOSS-TTSD and MOSS-TTS-Realtime currently supports **20 languages**:
+
+| Language | Code | Flag | Language | Code | Flag | Language | Code | Flag |
+|---|---|---|---|---|---|---|---|---|
+| Chinese | zh | 🇨🇳 | English | en | 🇺🇸 | German | de | 🇩🇪 |
+| Spanish | es | 🇪🇸 | French | fr | 🇫🇷 | Japanese | ja | 🇯🇵 |
+| Italian | it | 🇮🇹 | Hebrew | he | 🇮🇱 | Korean | ko | 🇰🇷 |
+| Russian | ru | 🇷🇺 | Persian (Farsi) | fa | 🇮🇷 | Arabic | ar | 🇸🇦 |
+| Polish | pl | 🇵🇱 | Portuguese | pt | 🇵🇹 | Czech | cs | 🇨🇿 |
+| Danish | da | 🇩🇰 | Swedish | sv | 🇸🇪 | Hungarian | hu | 🇭🇺 |
+| Greek | el | 🇬🇷 | Turkish | tr | 🇹🇷 |  |  |  |
 
 
 ## Quickstart
@@ -137,18 +153,19 @@ Notes:
 - FlashAttention 2 is only available on supported GPUs and is typically used with `torch.float16` or `torch.bfloat16`.
 
 
+<a id="moss-tts-basic-usage"></a>
 ### MOSS‑TTS Basic Usage
 
 If you prefer Gradio demos, we provide 4 scripts for the main models:
 
 | Model | Script | Run |
 |---|---|---|
-| MOSS-TTS | [clis/moss_tts_demo.py](moss_tts_demo.py) | `python clis/moss_tts_demo.py` |
-| MOSS-TTSD | [clis/moss_ttsd_demo.py](moss_ttsd_demo.py) | `python clis/moss_ttsd_demo.py` |
-| MOSS-VoiceGenerator | [clis/moss_voice_generator_demo.py](moss_voice_generator_demo.py) | `python clis/moss_voice_generator_demo.py` |
-| MOSS-SoundEffect | [clis/moss_sound_effect_demo.py](moss_sound_effect_demo.py) | `python clis/moss_sound_effect_demo.py` |
+| MOSS-TTS | [clis/moss_tts_app.py](clis/moss_tts_app.py) |
+| MOSS-TTSD | [clis/moss_ttsd_app.py](clis/moss_ttsd_app.py) | 
+| MOSS-VoiceGenerator | [clis/moss_voice_generator_app.py](clis/moss_voice_generator_app.py) |
+| MOSS-SoundEffect | [clis/moss_sound_effect_app.py](clis/moss_sound_effect_app.py) | 
 
-For the MOSS-TTS-Realtime Gradio demo, please refer to [docs/moss_tts_realtime_model_card.md](docs/moss_tts_realtime_model_card.md).
+For the MOSS-TTS-Realtime Gradio demo, please refer to [MOSS-TTS-Realtime Model Card](docs/moss_tts_realtime_model_card.md)
 
 ```python
 from pathlib import Path

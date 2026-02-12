@@ -46,8 +46,10 @@ MOSS‑TTS 家族是由 [MOSI.AI](https://mosi.cn/#hero) 与 [OpenMOSS 团队](h
 - [介绍](#introduction)
 - [模型架构](#architecture)
 - [已发布模型](#released-models)
+- [支持的语言](#supported-languages)
 - [快速开始](#quickstart)
   - [环境准备](#environment-setup)
+  - [（可选）安装 FlashAttention 2](#optional-install-flashattention-2)
   - [基础用法](#moss-tts-basic-usage)
 - [评测](#evaluation)
   - [MOSS-TTS 评测](#eval-moss-tts)
@@ -100,6 +102,22 @@ MOSS‑TTS 家族是由 [MOSI.AI](https://mosi.cn/#hero) 与 [OpenMOSS 团队](h
 | **MOSS‑SoundEffect** | `MossTTSDelay` | 8B | [![Model Card](https://img.shields.io/badge/Model%20Card-View-blue?logo=markdown)](docs/moss_sound_effect_model_card.md) | [![Hugging Face](https://img.shields.io/badge/Huggingface-Model-orange?logo=huggingface)](https://huggingface.co/OpenMOSS-Team/MOSS-SoundEffect) | [![ModelScope](https://img.shields.io/badge/ModelScope-Model-lightgrey?logo=modelscope)](https://modelscope.cn/models/openmoss/MOSS-SoundEffect) |
 | **MOSS‑TTS‑Realtime** | `MossTTSRealtime` | 1.7B | [![Model Card](https://img.shields.io/badge/Model%20Card-View-blue?logo=markdown)](docs/moss_tts_realtime_model_card.md) | [![Hugging Face](https://img.shields.io/badge/Huggingface-Model-orange?logo=huggingface)](https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Realtime) | [![ModelScope](https://img.shields.io/badge/ModelScope-Model-lightgrey?logo=modelscope)](https://modelscope.cn/models/openmoss/MOSS-TTS-Realtime) |
 
+<a id="supported-languages"></a>
+
+## 支持的语言
+
+MOSS-TT、MOSS-TTSD 和 MOSS-TTS-Realtime 目前支持 **20 种语言**：
+
+| Language | Code | Flag | Language | Code | Flag | Language | Code | Flag |
+|---|---|---|---|---|---|---|---|---|
+| 中文 | zh | 🇨🇳 | 英语 | en | 🇺🇸 | 德语 | de | 🇩🇪 |
+| 西班牙语 | es | 🇪🇸 | 法语 | fr | 🇫🇷 | 日语 | ja | 🇯🇵 |
+| 意大利语 | it | 🇮🇹 | 希伯来语 | he | 🇮🇱 | 韩语 | ko | 🇰🇷 |
+| 俄语 | ru | 🇷🇺 | 波斯语（法尔西语） | fa | 🇮🇷 | 阿拉伯语 | ar | 🇸🇦 |
+| 波兰语 | pl | 🇵🇱 | 葡萄牙语 | pt | 🇵🇹 | 捷克语 | cs | 🇨🇿 |
+| 丹麦语 | da | 🇩🇰 | 瑞典语 | sv | 🇸🇪 | 匈牙利语 | hu | 🇭🇺 |
+| 希腊语 | el | 🇬🇷 | 土耳其语 | tr | 🇹🇷 |  |  |  |
+
 
 
 <a id="quickstart"></a>
@@ -122,7 +140,7 @@ git clone https://github.com/OpenMOSS/MOSS-TTS.git
 cd MOSS-TTS
 pip install --extra-index-url https://download.pytorch.org/whl/cu128 -e .
 ```
-
+<a id="optional-install-flashattention-2"></a>
 #### （可选）安装 FlashAttention 2
 
 如果你的硬件支持，可以安装 FlashAttention 2 以提升速度并降低显存占用。
@@ -148,14 +166,14 @@ MAX_JOBS=4 pip install --extra-index-url https://download.pytorch.org/whl/cu128 
 
 如果你更希望使用 Gradio 界面，我们为 4 个主模型提供了对应脚本：
 
-| Model | Script | Run |
-|---|---|---|
-| MOSS-TTS | [clis/moss_tts_demo.py](moss_tts_demo.py) | `python clis/moss_tts_demo.py` |
-| MOSS-TTSD | [clis/moss_ttsd_demo.py](moss_ttsd_demo.py) | `python clis/moss_ttsd_demo.py` |
-| MOSS-VoiceGenerator | [clis/moss_voice_generator_demo.py](moss_voice_generator_demo.py) | `python clis/moss_voice_generator_demo.py` |
-| MOSS-SoundEffect | [clis/moss_sound_effect_demo.py](moss_sound_effect_demo.py) | `python clis/moss_sound_effect_demo.py` |
+| Model | Script | 
+|---|---|
+| MOSS-TTS | [clis/moss_tts_app.py](clis/moss_tts_app.py) |
+| MOSS-TTSD | [clis/moss_ttsd_app.py](clis/moss_ttsd_app.py) | 
+| MOSS-VoiceGenerator | [clis/moss_voice_generator_app.py](clis/moss_voice_generator_app.py) | 
+| MOSS-SoundEffect | [clis/moss_sound_effect_app.py](clis/moss_sound_effect_app.py) |
 
-MOSS-TTS-Realtime 的 Gradio demo 请直接参考 [docs/moss_tts_realtime_model_card.md](docs/moss_tts_realtime_model_card.md)。
+MOSS-TTS-Realtime 的 Gradio demo 请直接参考 [MOSS-TTS-Realtime Model Card](docs/moss_tts_realtime_model_card.md)
 
 ```python
 from pathlib import Path

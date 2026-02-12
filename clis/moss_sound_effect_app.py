@@ -15,9 +15,41 @@ torch.backends.cuda.enable_flash_sdp(True)
 torch.backends.cuda.enable_mem_efficient_sdp(True)
 torch.backends.cuda.enable_math_sdp(True)
 
-MODEL_PATH = "OpenMOSS-Team/MOSS-VoiceGenerator"
+MODEL_PATH = "OpenMOSS-Team/MOSS-SoundEffect"
 DEFAULT_ATTN_IMPLEMENTATION = "auto"
 DEFAULT_MAX_NEW_TOKENS = 4096
+TOKENS_PER_SECOND = 12.5
+
+
+@functools.lru_cache(maxsize=1)
+def load_backend(model_path: str, device_str: str, attn_implementation: str):
+    device = torch.device(device_str if torch.cuda.is_available() else "cpu")
+    dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
+    resolved_attn_implementation = resolve_attn_implementation(
+        requested=attn_implementation,
+        device=device,
+        dtype=dtype,
+    )
+
+    processor = AutoProcessor.from_pretrained(
+        model_path,
+        trust_remote_code=True,
+    )
+    if hasattr(processor, "audio_tokenizer"):
+        processor.audio_tokenizer = processor.audio_tokenizer.to(device)
+
+    model_kwargs = {
+        "trust_remote_code": True,
+        "torch_dtype": dtype,
+    }
+    if resolved_attn_implementation:
+        model_kwargs["attn_implementation"] = resolved_attn_implementation
+
+    model = AutoModel.from_pretrained(model_path, **model_kwargs).to(device)
+    model.eval()
+
+    sample_rate = int(getattr(processor.model_config, "sampling_rate", 24000))
+    return model, processor, device, sample_rate
 
 
 def resolve_attn_implementation(requested: str, device: torch.device, dtype: torch.dtype) -> str | None:
@@ -47,52 +79,23 @@ def resolve_attn_implementation(requested: str, device: torch.device, dtype: tor
     return "eager"
 
 
-@functools.lru_cache(maxsize=1)
-def load_backend(model_path: str, device_str: str, attn_implementation: str):
-    device = torch.device(device_str if torch.cuda.is_available() else "cpu")
-    dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
-    resolved_attn_implementation = resolve_attn_implementation(
-        requested=attn_implementation,
-        device=device,
-        dtype=dtype,
-    )
+def build_conversation(ambient_sound: str, duration_seconds: float, processor):
+    ambient_sound = (ambient_sound or "").strip()
+    if not ambient_sound:
+        raise ValueError("Please enter an ambient sound description.")
 
-    processor = AutoProcessor.from_pretrained(
-        model_path,
-        trust_remote_code=True,
-        normalize_inputs=True,
-    )
-    if hasattr(processor, "audio_tokenizer"):
-        processor.audio_tokenizer = processor.audio_tokenizer.to(device)
-
-    model_kwargs = {
-        "trust_remote_code": True,
-        "torch_dtype": dtype,
+    expected_tokens = max(1, int(float(duration_seconds) * TOKENS_PER_SECOND))
+    user_kwargs = {
+        "ambient_sound": ambient_sound,
+        "tokens": expected_tokens,
     }
-    if resolved_attn_implementation:
-        model_kwargs["attn_implementation"] = resolved_attn_implementation
 
-    model = AutoModel.from_pretrained(model_path, **model_kwargs).to(device)
-    model.eval()
-
-    sample_rate = int(getattr(processor.model_config, "sampling_rate", 24000))
-    return model, processor, device, sample_rate
-
-
-def build_conversation(text: str, instruction: str, processor):
-    text = (text or "").strip()
-    instruction = (instruction or "").strip()
-    if not text:
-        raise ValueError("Please enter text to synthesize.")
-    if not instruction:
-        raise ValueError("Please enter a voice instruction.")
-
-    return [[processor.build_user_message(text=text, instruction=instruction)]]
+    return [[processor.build_user_message(**user_kwargs)]], expected_tokens
 
 
 def run_inference(
-    text: str,
-    instruction: str,
+    ambient_sound: str,
+    duration_seconds: float,
     temperature: float,
     top_p: float,
     top_k: int,
@@ -109,9 +112,9 @@ def run_inference(
         attn_implementation=attn_implementation,
     )
 
-    conversations = build_conversation(
-        text=text,
-        instruction=instruction,
+    conversations, expected_tokens = build_conversation(
+        ambient_sound=ambient_sound,
+        duration_seconds=duration_seconds,
         processor=processor,
     )
 
@@ -147,6 +150,7 @@ def run_inference(
     elapsed = time.monotonic() - started_at
     status = (
         f"Done | elapsed: {elapsed:.2f}s | "
+        f"duration_seconds={float(duration_seconds):.0f}, expected_tokens={int(expected_tokens)}, "
         f"max_new_tokens={int(max_new_tokens)}, "
         f"audio_temperature={float(temperature):.2f}, audio_top_p={float(top_p):.2f}, "
         f"audio_top_k={int(top_k)}, audio_repetition_penalty={float(repetition_penalty):.2f}"
@@ -188,10 +192,10 @@ def build_demo(args: argparse.Namespace):
     #output_audio {
       padding-bottom: 12px;
       margin-bottom: 8px;
-      overflow: visible !important;
+      overflow: hidden !important;
     }
     #output_audio > .wrap {
-      overflow: visible !important;
+      overflow: hidden !important;
     }
     #output_audio audio {
       margin-bottom: 6px;
@@ -202,27 +206,29 @@ def build_demo(args: argparse.Namespace):
     }
     """
 
-    with gr.Blocks(title="MOSS-VoiceGenerator Demo", css=custom_css) as demo:
+    with gr.Blocks(title="MOSS-SoundEffect Demo", css=custom_css) as demo:
         gr.Markdown(
             """
             <div class="app-card">
-              <div class="app-title">MOSS-VoiceGenerator</div>
-              <div class="app-subtitle">Design expressive voices from instruction + text without reference audio.</div>
+              <div class="app-title">MOSS-SoundEffect</div>
+              <div class="app-subtitle">Generate ambient sounds and sound effects from text descriptions.</div>
             </div>
             """
         )
 
         with gr.Row(equal_height=False):
             with gr.Column(scale=3):
-                instruction = gr.Textbox(
-                    label="Voice Instruction",
-                    lines=5,
-                    placeholder="Example: Warm, gentle female narrator voice with calm pacing and clear articulation.",
-                )
-                text = gr.Textbox(
-                    label="Text",
+                ambient_sound = gr.Textbox(
+                    label="Ambient Sound Description",
                     lines=8,
-                    placeholder="Enter the text content to synthesize with the instruction-defined voice.",
+                    placeholder="Example: Thunder rolls in the distance while heavy rain falls on a metal roof.",
+                )
+                duration_seconds = gr.Slider(
+                    minimum=1,
+                    maximum=60,
+                    step=1,
+                    value=10,
+                    label="Duration (seconds)",
                 )
 
                 with gr.Accordion("Sampling Parameters (Audio)", open=True):
@@ -251,7 +257,7 @@ def build_demo(args: argparse.Namespace):
                         minimum=0.8,
                         maximum=2.0,
                         step=0.05,
-                        value=1.1,
+                        value=1.2,
                         label="repetition_penalty",
                     )
                     max_new_tokens = gr.Slider(
@@ -262,16 +268,16 @@ def build_demo(args: argparse.Namespace):
                         label="max_new_tokens",
                     )
 
-                run_btn = gr.Button("Generate Voice", variant="primary", elem_id="run-btn")
+                run_btn = gr.Button("Generate Sound Effect", variant="primary", elem_id="run-btn")
 
             with gr.Column(scale=2):
                 output_audio = gr.Audio(label="Output Audio", type="numpy", elem_id="output_audio")
                 status = gr.Textbox(label="Status", lines=4, interactive=False)
 
         run_btn.click(
-            fn=lambda text, instruction, temperature, top_p, top_k, repetition_penalty, max_new_tokens: run_inference(
-                text=text,
-                instruction=instruction,
+            fn=lambda ambient_sound, duration_seconds, temperature, top_p, top_k, repetition_penalty, max_new_tokens: run_inference(
+                ambient_sound=ambient_sound,
+                duration_seconds=duration_seconds,
                 temperature=temperature,
                 top_p=top_p,
                 top_k=top_k,
@@ -282,8 +288,8 @@ def build_demo(args: argparse.Namespace):
                 attn_implementation=args.attn_implementation,
             ),
             inputs=[
-                text,
-                instruction,
+                ambient_sound,
+                duration_seconds,
                 temperature,
                 top_p,
                 top_k,
@@ -296,12 +302,12 @@ def build_demo(args: argparse.Namespace):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MOSS-VoiceGenerator Gradio Demo")
+    parser = argparse.ArgumentParser(description="MOSS-SoundEffect Gradio Demo")
     parser.add_argument("--model_path", type=str, default=MODEL_PATH)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--attn_implementation", type=str, default=DEFAULT_ATTN_IMPLEMENTATION)
     parser.add_argument("--host", type=str, default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=7862)
+    parser.add_argument("--port", type=int, default=7861)
     parser.add_argument("--share", action="store_true")
     args = parser.parse_args()
 
