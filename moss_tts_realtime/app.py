@@ -98,6 +98,7 @@ class BackendPaths:
     codec_model_path: str
     device_str: str
     attn_impl: str
+    cpu_offload: bool = False
 
 
 @dataclass(frozen=True)
@@ -290,6 +291,7 @@ def _load_backend(
     codec_model_path: str,
     device_str: str,
     attn_impl: str,
+    cpu_offload: bool = False,
 ):
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required for the MossTTSRealtime streaming demo.")
@@ -299,12 +301,21 @@ def _load_backend(
     processor = MossTTSRealtimeProcessor(tokenizer)
 
     dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+
+    model_kwargs = {"torch_dtype": dtype}
     if attn_impl and attn_impl.lower() not in {"none", ""}:
-        model = MossTTSRealtime.from_pretrained(model_path, attn_implementation=attn_impl, torch_dtype=dtype).to(device)
+        model_kwargs["attn_implementation"] = attn_impl
+
+    if cpu_offload:
+        model_kwargs["device_map"] = "auto"
+        model = MossTTSRealtime.from_pretrained(model_path, **model_kwargs)
         if hasattr(model, "language_model") and hasattr(model.language_model, "config"):
-            model.language_model.config.attn_implementation = "flash_attention_2"
+            model.language_model.config.attn_implementation = attn_impl or "sdpa"
+        device = next(model.parameters()).device
     else:
-        model = MossTTSRealtime.from_pretrained(model_path, torch_dtype=dtype).to(device)
+        model = MossTTSRealtime.from_pretrained(model_path, **model_kwargs).to(device)
+        if attn_impl and attn_impl.lower() not in {"none", ""} and hasattr(model, "language_model") and hasattr(model.language_model, "config"):
+            model.language_model.config.attn_implementation = "flash_attention_2"
     model.eval()
 
     codec = _load_codec(device, codec_model_path)
@@ -331,6 +342,7 @@ class StreamingTTSDemo:
             backend.codec_model_path,
             backend.device_str,
             backend.attn_impl,
+            backend.cpu_offload,
         )
 
     def _validate_request(self, request: StreamingRequest) -> tuple[Path | None, Path | None]:
@@ -899,6 +911,7 @@ def _build_demo(args: argparse.Namespace):
                         codec_model_path=args.codec_model_path,
                         device_str=args.device,
                         attn_impl=args.attn_implementation,
+                        cpu_offload=args.cpu_offload,
                     ),
                 )
 
@@ -980,6 +993,8 @@ def main():
     parser.add_argument("--codec_ckpt", type=str, default=None)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--attn_implementation", type=str, default="sdpa")
+    parser.add_argument("--cpu_offload", action="store_true",
+                        help="Offload model layers to CPU via device_map='auto' to reduce GPU memory usage.")
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8082)
     parser.add_argument("--share", action="store_true")

@@ -176,6 +176,18 @@ MAX_JOBS=4 pip install --extra-index-url https://download.pytorch.org/whl/cu128 
 
 MOSS-TTS-Realtime 的 Gradio demo 请直接参考 [MOSS-TTS-Realtime Model Card](docs/moss_tts_realtime_model_card.md)
 
+#### GPU 显存优化
+
+如果 GPU 显存不足以容纳完整模型（例如在 16 GB 显卡上运行 8B 的 MOSS-TTS），可以开启 **CPU offload**，将模型自动拆分到 GPU 和系统内存中。这会牺牲一些速度，但能显著降低显存占用。
+
+**Gradio 界面** — 添加 `--cpu_offload` 参数：
+
+```bash
+python clis/moss_tts_app.py --cpu_offload
+```
+
+**Python 脚本** — 在下方示例中设置 `cpu_offload = True`：
+
 ```python
 from pathlib import Path
 import importlib.util
@@ -193,6 +205,8 @@ torch.backends.cuda.enable_math_sdp(True)
 pretrained_model_name_or_path = "OpenMOSS-Team/MOSS-TTS"
 device = "cuda" if torch.cuda.is_available() else "cpu"
 dtype = torch.bfloat16 if device == "cuda" else torch.float32
+# 设为 True 可在 GPU 显存不足时将部分模型层卸载到 CPU 内存
+cpu_offload = False
 
 def resolve_attn_implementation() -> str:
     # Prefer FlashAttention 2 when package + device conditions are met.
@@ -220,7 +234,6 @@ processor = AutoProcessor.from_pretrained(
     pretrained_model_name_or_path,
     trust_remote_code=True,
 )
-processor.audio_tokenizer = processor.audio_tokenizer.to(device)
 
 text_1 = "亲爱的你，\n你好呀。\n\n今天，我想用最认真、最温柔的声音，对你说一些重要的话。\n这些话，像一颗小小的星星，希望能在你的心里慢慢发光。\n\n首先，我想祝你——\n每天都能平平安安、快快乐乐。\n\n希望你早上醒来的时候，\n窗外有光，屋子里很安静，\n你的心是轻轻的，没有着急，也没有害怕。\n\n希望你吃饭的时候胃口很好，\n走路的时候脚步稳稳，\n晚上睡觉的时候，能做一个又一个甜甜的梦。\n\n我希望你能一直保持好奇心。\n对世界充满问题，\n对天空、星星、花草、书本和故事感兴趣。\n当你问“为什么”的时候，\n希望总有人愿意认真地听你说话。\n\n我也希望你学会温柔。\n温柔地对待朋友，\n温柔地对待小动物，\n也温柔地对待自己。\n\n如果有一天你犯了错，\n请不要太快责怪自己，\n因为每一个认真成长的人，\n都会在路上慢慢学会更好的方法。\n\n愿你拥有勇气。\n当你站在陌生的地方时，\n当你第一次举手发言时，\n当你遇到困难、感到害怕的时候，\n希望你能轻轻地告诉自己：\n“我可以试一试。”\n\n就算没有一次成功，也没有关系。\n失败不是坏事，\n它只是告诉你，你正在努力。\n\n我希望你学会分享快乐。\n把开心的事情告诉别人，\n把笑声送给身边的人，\n因为快乐被分享的时候，\n会变得更大、更亮。\n\n如果有一天你感到难过，\n我希望你知道——\n难过并不丢脸，\n哭泣也不是软弱。\n\n愿你能找到一个安全的地方，\n慢慢把心里的话说出来，\n然后再一次抬起头，看见希望。\n\n我还希望你能拥有梦想。\n这个梦想也许很大，\n也许很小，\n也许现在还说不清楚。\n\n没关系。\n梦想会和你一起长大，\n在时间里慢慢变得清楚。\n\n最后，我想送你一个最最重要的祝福：\n\n愿你被世界温柔对待，\n也愿你成为一个温柔的人。\n\n愿你的每一天，\n都值得被记住，\n都值得被珍惜。\n\n亲爱的你，\n请记住，\n你是独一无二的，\n你已经很棒了，\n而你的未来，\n一定会慢慢变得闪闪发光。\n\n祝你健康、勇敢、幸福，\n祝你永远带着笑容向前走。"
 text_2 = "We stand on the threshold of the AI era.\nArtificial intelligence is no longer just a concept in laboratories, but is entering every industry, every creative endeavor, and every decision. It has learned to see, hear, speak, and think, and is beginning to become an extension of human capabilities. AI is not about replacing humans, but about amplifying human creativity, making knowledge more equitable, more efficient, and allowing imagination to reach further. A new era, jointly shaped by humans and intelligent systems, has arrived."
@@ -250,13 +263,20 @@ conversations = [
     [processor.build_user_message(text=text_2, tokens=600)],
 ]
 
-model = AutoModel.from_pretrained(
-    pretrained_model_name_or_path,
-    trust_remote_code=True,
-    attn_implementation=attn_implementation,
-    torch_dtype=dtype,
-).to(device)
+model_kwargs = {
+    "trust_remote_code": True,
+    "attn_implementation": attn_implementation,
+    "torch_dtype": dtype,
+}
+if cpu_offload:
+    model_kwargs["device_map"] = "auto"
+    model = AutoModel.from_pretrained(pretrained_model_name_or_path, **model_kwargs)
+    device = next(model.parameters()).device
+else:
+    model = AutoModel.from_pretrained(pretrained_model_name_or_path, **model_kwargs).to(device)
 model.eval()
+
+processor.audio_tokenizer = processor.audio_tokenizer.to(device)
 
 batch_size = 1
 

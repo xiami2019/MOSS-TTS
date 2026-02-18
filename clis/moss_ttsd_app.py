@@ -55,7 +55,7 @@ def resolve_attn_implementation(requested: str, device: torch.device, dtype: tor
 
 
 @functools.lru_cache(maxsize=1)
-def load_backend(model_path: str, codec_path: str, device_str: str, attn_implementation: str):
+def load_backend(model_path: str, codec_path: str, device_str: str, attn_implementation: str, cpu_offload: bool = False):
     device = torch.device(device_str if torch.cuda.is_available() else "cpu")
     dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
     resolved_attn_implementation = resolve_attn_implementation(
@@ -69,9 +69,6 @@ def load_backend(model_path: str, codec_path: str, device_str: str, attn_impleme
         trust_remote_code=True,
         codec_path=codec_path,
     )
-    if hasattr(processor, "audio_tokenizer"):
-        processor.audio_tokenizer = processor.audio_tokenizer.to(device)
-        processor.audio_tokenizer.eval()
 
     model_kwargs = {
         "trust_remote_code": True,
@@ -80,8 +77,17 @@ def load_backend(model_path: str, codec_path: str, device_str: str, attn_impleme
     if resolved_attn_implementation:
         model_kwargs["attn_implementation"] = resolved_attn_implementation
 
-    model = AutoModel.from_pretrained(model_path, **model_kwargs).to(device)
+    if cpu_offload:
+        model_kwargs["device_map"] = "auto"
+        model = AutoModel.from_pretrained(model_path, **model_kwargs)
+        device = next(model.parameters()).device
+    else:
+        model = AutoModel.from_pretrained(model_path, **model_kwargs).to(device)
     model.eval()
+
+    if hasattr(processor, "audio_tokenizer"):
+        processor.audio_tokenizer = processor.audio_tokenizer.to(device)
+        processor.audio_tokenizer.eval()
 
     sample_rate = int(getattr(processor.model_config, "sampling_rate", 24000))
     return model, processor, device, sample_rate
@@ -287,7 +293,7 @@ def run_inference(speaker_count: int, *all_inputs):
     reference_audio_values = all_inputs[:MAX_SPEAKERS]
     prompt_text_values = all_inputs[MAX_SPEAKERS : 2 * MAX_SPEAKERS]
     dialogue_text = all_inputs[2 * MAX_SPEAKERS]
-    text_normalize, sample_rate_normalize, temperature, top_p, top_k, repetition_penalty, max_new_tokens, model_path, codec_path, device, attn_implementation = all_inputs[
+    text_normalize, sample_rate_normalize, temperature, top_p, top_k, repetition_penalty, max_new_tokens, model_path, codec_path, device, attn_implementation, cpu_offload = all_inputs[
         2 * MAX_SPEAKERS + 1 :
     ]
 
@@ -297,6 +303,7 @@ def run_inference(speaker_count: int, *all_inputs):
         codec_path=str(codec_path),
         device_str=str(device),
         attn_implementation=str(attn_implementation),
+        cpu_offload=bool(cpu_offload),
     )
 
     text_normalize = bool(text_normalize)
@@ -608,6 +615,7 @@ def build_demo(args: argparse.Namespace):
                 args.codec_path,
                 args.device,
                 args.attn_implementation,
+                args.cpu_offload,
             ),
             inputs=[
                 speaker_count,
@@ -633,6 +641,8 @@ def main() -> None:
     parser.add_argument("--codec_path", type=str, default=CODEC_MODEL_PATH)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--attn_implementation", type=str, default=DEFAULT_ATTN_IMPLEMENTATION)
+    parser.add_argument("--cpu_offload", action="store_true",
+                        help="Offload model layers to CPU via device_map='auto' to reduce GPU memory usage.")
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=7863)
     parser.add_argument("--share", action="store_true")
@@ -645,7 +655,7 @@ def main() -> None:
         device=runtime_device,
         dtype=runtime_dtype,
     ) or "none"
-    print(f"[INFO] Using attn_implementation={args.attn_implementation}", flush=True)
+    print(f"[INFO] Using attn_implementation={args.attn_implementation}, cpu_offload={args.cpu_offload}", flush=True)
 
     preload_started_at = time.monotonic()
     print(
@@ -658,6 +668,7 @@ def main() -> None:
         codec_path=args.codec_path,
         device_str=args.device,
         attn_implementation=args.attn_implementation,
+        cpu_offload=args.cpu_offload,
     )
     print(
         f"[Startup] Backend preload finished in {time.monotonic() - preload_started_at:.2f}s",

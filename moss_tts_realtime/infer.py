@@ -11,7 +11,7 @@ from transformers import AutoModel
 MAX_CHANNELS = 16
 CODEC_SAMPLE_RATE = 24000
 
-def main(model_path, codec_path):
+def main(model_path, codec_path, cpu_offload=False):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if device == "cuda" else torch.float32
 
@@ -35,10 +35,15 @@ def main(model_path, codec_path):
 
 
     attn_implementation = resolve_attn_implementation()
-    print(f"[INFO] Using attn_implementation={attn_implementation}")
-    
-    # Because the local transformer module uses StaticCache, which causes errors when using the FlashAttention implementation. If FlashAttention is required, replace StaticCache with DynamicCache.
-    model = MossTTSRealtime.from_pretrained(model_path, attn_implementation=attn_implementation, torch_dtype=torch.bfloat16).to(device)
+    print(f"[INFO] Using attn_implementation={attn_implementation}, cpu_offload={cpu_offload}")
+
+    model_kwargs = {"attn_implementation": attn_implementation, "torch_dtype": dtype}
+    if cpu_offload:
+        model_kwargs["device_map"] = "auto"
+        model = MossTTSRealtime.from_pretrained(model_path, **model_kwargs)
+        device = next(model.parameters()).device
+    else:
+        model = MossTTSRealtime.from_pretrained(model_path, **model_kwargs).to(device)
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     codec = AutoModel.from_pretrained(codec_path, trust_remote_code=True).eval()
     codec = codec.to(device)
